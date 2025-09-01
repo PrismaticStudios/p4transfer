@@ -783,10 +783,23 @@ class ChangelistComparer(object):
         targfiles = set([chRev.localFile for chRev in targlist])
         if not self.caseSensitive:
             srcfiles = set([escapeWildCards(x.lower()) for x in srcfiles])
-            targfiles = set([x.lower() for x in targfiles])
+            targfiles = set([escapeWildCards(x.lower()) for x in targfiles])
         diffs = srcfiles.difference(targfiles)
         if diffs:
-            return (False, "Replication failure: missing elements in target changelist:\n%s" % "\n    ".join([str(r) for r in diffs]))
+            # Second chance against the localFiles differing only by characters like pathsep that are cleaned in fixedLocalFile
+            srcfixedfiles = set([chRev.fixedLocalFile for chRev in srclist if chRev.fixedLocalFile not in filesToIgnore])
+            targfixedfiles = set([chRev.fixedLocalFile for chRev in targlist])
+            if not self.caseSensitive:
+                srcfixedfiles = set([escapeWildCards(x.lower()) for x in srcfixedfiles])
+                targfixedfiles = set([escapeWildCards(x.lower()) for x in targfixedfiles])
+
+            fixedlocaldiffs = srcfixedfiles.difference(targfixedfiles)
+
+            if fixedlocaldiffs:
+                return (False, "Replication failure: missing elements in target changelist:\n%s" % "\n    ".join([str(r) for r in fixedlocaldiffs]))
+            else:
+                print("The following files differed only by the following without correction:\n{}".format("\n    ".join([str(r) for r in fixedlocaldiffs])))
+            
         srcfiles = set(chRev for chRev in srclist if chRev.localFile not in filesToIgnore)
         targfiles = set(chRev for chRev in targlist)
         diffs = srcfiles.difference(targfiles)
