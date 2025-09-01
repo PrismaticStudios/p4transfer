@@ -816,26 +816,28 @@ class ChangelistComparer(object):
             if not self.caseSensitive:
                 for chRev in srcfiles:
                     chRev.localFile = chRev.localFile.lower()
+                    chRev.fixedLocalFile = chRev.fixedLocalFile.lower()
                 for chRev in targfiles:
                     chRev.localFile = chRev.localFile.lower()
+                    chRev.fixedLocalFile = chRev.fixedLocalFile.lower()
                 new_diffs = [r for r in diffs if r.fileSize and r.digest]
                 diffs2 = srcfiles.difference(targfiles)
                 if not diffs2:
                     return (True, "")
                 for chRev in targlist:
-                    targlookup[chRev.localFile] = chRev
+                    targlookup[chRev.fixedLocalFile] = chRev
                 # For case insenstive, focus on digest rather than fileSize
-                new_diffs = [r for r in diffs2 if r != targlookup[escapeWildCards(r.localFile)] and r.digest != targlookup[escapeWildCards(r.localFile)].digest]
+                new_diffs = [r for r in diffs2 if r != targlookup[escapeWildCards(r.fixedLocalFile)] and r.digest != targlookup[escapeWildCards(r.fixedLocalFile)].digest]
                 if not new_diffs:
                     return (True, "")
                 return (False, "Replication failure (case insensitive): src/target content differences found\nsrc:%s\ntarg:%s" % (
                     "\n    ".join([str(r) for r in diffs]),
-                    "\n    ".join([str(targlookup[r.localFile]) for r in diffs])))
+                    "\n    ".join([str(targlookup[r.fixedLocalFile]) for r in diffs])))
             for chRev in targlist:
-                targlookup[chRev.localFile] = chRev
+                targlookup[chRev.fixedLocalFile] = chRev
             return (False, "Replication failure: src/target content differences found\nsrc:%s\ntarg:%s" % (
                 "\n    ".join([str(r) for r in diffs]),
-                "\n    ".join([str(targlookup[r.localFile]) for r in diffs])))
+                "\n    ".join([str(targlookup[r.fixedLocalFile]) for r in diffs])))
         return (True, "")
 
 
