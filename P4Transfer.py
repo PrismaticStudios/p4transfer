@@ -522,9 +522,9 @@ def LookupLineEnding(perforceOSString):
 
     if OSType.lower() == "linux":
         # Linux OS
-        return "\n"
+        return b"\n"
     elif OSType.lower() == "nt":
-        return "\r\n"
+        return b"\r\n"
     else:
         raise NotImplementedError("Unknown OS Type when trying to get line endings")
 
