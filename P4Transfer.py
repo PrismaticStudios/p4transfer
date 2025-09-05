@@ -368,9 +368,38 @@ class SourceTargetTextComparison(object):
         self.targetVersion = self._getOS(svrString)
         self.targetP4DVersion = self._getP4DVersion(svrString)
 
+    def _getOSBitness(self, versionString):
+        # TODO Validate this
+
+        if versionString.startswith("NT"):
+            # return the string after NT
+            # We also drop the X in front of X86 or X64
+            return versionString[3:]
+        elif versionString.startswith("LINUX"):
+            # Linux strings seem to end with the bitness
+            # This seems to work on Windows too
+            return versionString[-2:]
+        else:
+            # TODO: MacOS?
+            raise NotImplementedError("Unknown P4 Version String")
+        
+    def _getKernelType(self, versionString):
+        if versionString.startswith("NT"):
+            return "NT"
+        elif versionString.startswith("LINUX"):
+            return "LINUX"
+        else:
+            # return verbatim string, this should still match itself 
+            return versionString
+
     def compatible(self):
+        # TODO: Update fileContentComparisonDiffersOnLineEnding if this changes
         if self.sourceVersion:
             # TODO: compare different architectures better - e.g. allow 32 vs 64 bit
+
+            sourceKernel = self._getKernelType(self.sourceVersion)
+            targetKernel = self._getKernelType(self.targetVersion)
+
             return self.sourceVersion == self.targetVersion
         return False
 
@@ -478,6 +507,47 @@ def fileContentComparisonPossible(ftype):
         return False
     return sourceTargetTextComparison.compatible()
 
+def fileContentComparisonDiffersOnLineEnding(ftype):
+    "Decides if it is possible to compare size/digest when line endings are normalised to src"
+    # TODO: Update this if the implementation of compatible changes
+    return not sourceTargetTextComparison.compatible()
+
+
+def LookupLineEnding(perforceOSString):
+    # TODO: Validate these are the only patterns we are going to see
+    # TODO: MacOS?
+    
+    # Try to align these to os.name?
+    OSType = sourceTargetTextComparison._getKernelType(perforceOSString)
+
+    if OSType.lower() == "linux":
+        # Linux OS
+        return "\n"
+    elif OSType.lower() == "nt":
+        return "\r\n"
+    else:
+        raise NotImplementedError("Unknown OS Type when trying to get line endings")
+
+def sanitiseOSDifferences(filePath):
+    FileContents = None
+    with open(filePath, "rb") as f:
+        FileContents = f.read()
+    
+    # Get src P4 line ending convention
+    P4SourceOS = sourceTargetTextComparison.sourceVersion
+    P4SourceLineEndings = LookupLineEnding(P4SourceOS)
+
+    #P4TargetOS = sourceTargetTextComparison.targetVersion
+    #P4TargetLineEndings = LookupLineEnding(P4TargetOS)
+
+    # We want to convert the line endings for the disk file to the source file to match the size and digest
+    LocalWorkspaceLineEnding = LookupLineEnding(os.name)
+
+    # Regex convert
+    ModifiedContents = FileContents.replace(LocalWorkspaceLineEnding, P4SourceLineEndings)
+
+    return ModifiedContents
+
 
 def readContents(fname):
     "Reads file contents appropriate according to type"
@@ -512,6 +582,10 @@ def makeWritable(fpath):
     "Make file writable"
     os.chmod(fpath, stat.S_IWRITE + stat.S_IREAD)
 
+def hashBuffer(data):
+    m = hashlib.md5()
+    m.update(data)
+    return m.hexdigest()
 
 def getLocalDigest(fname, blocksize=2**20):
     "Return MD5 digest of file on disk"
@@ -587,6 +661,15 @@ def diskFileContentModified(file):
                 return False
             else:
                 raise
+    elif fileContentComparisonDiffersOnLineEnding(file.fixedLocalFile):
+        # Handle the edge case where a file is non-comparable due only to OS differences
+        if os.path.exists(file.fixedLocalFile):
+            # Cannot use getsize since we need to modify the contents
+            byteBuffer = sanitiseOSDifferences(file.fixedLocalFile)
+            fileSize = len(byteBuffer)
+            digest = hashBuffer(byteBuffer)
+        else:
+            return False
     elif isKeyTextFile(file.type):
         fileSize, digest = getKTextDigest(file.fixedLocalFile)
     return (fileSize, digest.lower()) != (int(file.fileSize), file.digest.lower())
